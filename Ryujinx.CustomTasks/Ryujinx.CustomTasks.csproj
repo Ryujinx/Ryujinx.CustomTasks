@@ -9,6 +9,7 @@
         <Title>Ryujinx.CustomTasks</Title>
         <Description>A collection of custom MSBuild tasks.</Description>
         <RepositoryUrl>https://github.com/Ryujinx/Ryujinx.CustomTasks</RepositoryUrl>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
 
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -23,6 +24,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath="\" />
         <Content Include="build/Ryujinx.CustomTasks.props" PackagePath="build\" />
         <Content Include="build/Ryujinx.CustomTasks.targets" PackagePath="build\" />
     </ItemGroup>
