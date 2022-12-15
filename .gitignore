@@ -120,6 +120,9 @@ ClientBin/
 packages/*
 *.config
 
+# Allow nuget.config
+!nuget.config
+
 # RIA/Silverlight projects
 Generated_Code/
 
