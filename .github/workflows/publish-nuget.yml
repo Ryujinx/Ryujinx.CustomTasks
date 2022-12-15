@@ -1,0 +1,52 @@
+name: Publish Nuget package
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - ".gitignore"
+      - ".editorconfig"
+      - ".gitattributes"
+      - ".github/**"
+      - "*.md"
+
+  workflow_dispatch:
+
+concurrency: publish
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    env:
+      BASE_VERSION: "1.0"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 7.0.x
+
+      - name: Get short sha
+        id: git_short_sha
+        run: |
+          echo "result=$(git rev-parse --short "${{ github.sha }}")" >> $GITHUB_OUTPUT
+
+      - name: Get version info
+        id: version_info
+        run: |
+          [[ "${{ github.ref_name }}" == "master" ]] \
+          && echo "build_version=${{ env.BASE_VERSION }}.${{ github.run_number }}" >> $GITHUB_OUTPUT \
+          || echo "build_version=${{ env.BASE_VERSION }}.${{ github.run_number }}-${{ steps.git_short_sha.outputs.result }}" >> $GITHUB_OUTPUT
+
+      - name: Package project
+        run: |
+          dotnet pack -c Release --property:Version="${{ steps.version_info.outputs.build_version }}"
+
+      - name: Publish Nuget package
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push ./*/bin/Release/*.nupkg -k "$NUGET_AUTH_TOKEN" -s https://api.nuget.org/v3/index.json
