@@ -10,20 +10,16 @@
 
     <!--A target that generates code, which is executed before the compilation-->
     <!-- TODO: Make "Outputs" more generic -->
-    <Target Name="BeforeCompile" Inputs="@(ArrayInputFiles)" Outputs="$(ArrayOutputPath)\Arrays.g.cs">
+    <Target Name="BeforeCompile" Inputs="@(ArrayInputFiles)" Outputs="$(ArrayOutputPath)\Arrays.g.cs;$(ArrayOutputPath)\IArray.g.cs">
         <!--Calling our custom task -->
         <GenerateArrays ArrayNamespace="$(ArrayNamespace)" InputFiles="@(ArrayInputFiles)" OutputPath="$(ArrayOutputPath)">
-            <Output TaskParameter="OutputFiles" PropertyName="ArrayOutputFiles" />
+            <!--Our generated files are included to be compiled-->
+            <Output TaskParameter="OutputFiles" ItemName="Compile" />
         </GenerateArrays>
-        <!--Our generated files are included to be compiled-->
-        <ItemGroup>
-            <Compile Remove="@(ArrayOutputFiles)" />
-            <Compile Include="@(ArrayOutputFiles)" />
-        </ItemGroup>
     </Target>
 
     <!--The generated files are deleted after a general clean. It will force the regeneration on rebuild -->
     <Target Name="AfterClean">
-        <Delete Files="$(ArrayOutputPath)\*.g.cs" />
+        <Delete Files="$(ArrayOutputPath)\Arrays.g.cs;$(ArrayOutputPath)\IArray.g.cs" />
     </Target>
 </Project>

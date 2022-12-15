@@ -180,7 +180,7 @@ namespace Ryujinx.CustomTasks
             {
                 string fullPath = item.GetMetadata("FullPath");
 
-                if (fullPath.EndsWith(".g.cs") || fullPath.Contains("obj\\Debug\\") || fullPath.Contains("obj\\Release\\"))
+                if (fullPath.EndsWith(".g.cs") || fullPath.Contains(Path.Combine("obj","Debug")) || fullPath.Contains(Path.Combine("obj", "Release")))
                 {
                     continue;
                 }
