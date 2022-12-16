@@ -6,7 +6,7 @@ namespace Ryujinx.CustomTasks.SyntaxWalker
 {
     class ArraySizeCollector : CSharpSyntaxWalker
     {
-        public ICollection<int> ArraySizes { get; } = new List<int>();
+        public HashSet<int> ArraySizes { get; } = new HashSet<int>();
 
         private void AddArrayString(string name)
         {
@@ -17,7 +17,7 @@ namespace Ryujinx.CustomTasks.SyntaxWalker
 
             string rawArrayType = name.Split('<')[0];
 
-            if (int.TryParse(rawArrayType.Substring(5), out int size) && !ArraySizes.Contains(size))
+            if (int.TryParse(rawArrayType.Substring(5), out int size))
             {
                 ArraySizes.Add(size);
             }

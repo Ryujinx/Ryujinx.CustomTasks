@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using Ryujinx.CustomTasks.SyntaxWalker;
 using Ryujinx.CustomTasks.Helper;
+using System.Linq;
 using Task = Microsoft.Build.Utilities.Task;
 
 namespace Ryujinx.CustomTasks
@@ -15,7 +16,7 @@ namespace Ryujinx.CustomTasks
         private const string InterfaceFileName = "IArray.g.cs";
         private const string ArraysFileName = "Arrays.g.cs";
 
-        private readonly List<string> _outputFiles = new List<string>();
+        private readonly HashSet<string> _outputFiles = new HashSet<string>();
 
         [Required]
         public string ArrayNamespace { get; set; }
@@ -58,7 +59,7 @@ namespace Ryujinx.CustomTasks
             _outputFiles.Add(filePath);
         }
 
-        private ICollection<int> GetArraySizes(string itemPath)
+        private HashSet<int> GetArraySizes(string itemPath)
         {
             Log.LogMessage(MessageImportance.Low, $"Searching for StructArray types in: {itemPath}");
 
