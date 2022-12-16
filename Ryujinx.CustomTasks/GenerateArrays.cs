@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using Ryujinx.CustomTasks.SyntaxWalker;
 using Ryujinx.CustomTasks.Helper;
+using System;
 using System.Linq;
 using Task = Microsoft.Build.Utilities.Task;
 
@@ -63,6 +64,145 @@ namespace Ryujinx.CustomTasks
             }
 
             return size;
+        }
+
+        private string[] GetProjectFiles()
+        {
+            if (ScanSolution)
+            {
+                return Directory.GetFiles(SolutionDir, "*.csproj", SearchOption.AllDirectories);
+            }
+            else
+            {
+                return Directory.GetFiles(ProjectDir, "*.csproj", SearchOption.TopDirectoryOnly);
+            }
+        }
+
+        private bool TryGetNugetAssemblyPath(string package, string version, out string assemblyPath)
+        {
+            if (string.IsNullOrEmpty(version))
+            {
+                assemblyPath = "";
+
+                return false;
+            }
+
+            string basePath = Path.Combine(NugetPackagePath, package.ToLower(), version, "lib");
+            string filePath;
+
+            if (Directory.Exists(Path.Combine(basePath, TargetFramework)))
+            {
+                filePath = Directory.GetFiles(Path.Combine(basePath, TargetFramework), "*.dll", SearchOption.TopDirectoryOnly).FirstOrDefault();
+
+                if (string.IsNullOrEmpty(filePath))
+                {
+                    assemblyPath = "";
+
+                    return false;
+                }
+
+                assemblyPath = filePath;
+
+                return true;
+            }
+
+            string[] frameworks = Directory.GetDirectories(basePath);
+
+            List<string> standardList = frameworks.Where(framework => framework.Contains("netstandard")).ToList();
+
+            if (standardList.Count > 0)
+            {
+                filePath = Directory.GetFiles(Path.Combine(basePath, standardList.Max()), "*.dll", SearchOption.TopDirectoryOnly).FirstOrDefault();
+
+                if (string.IsNullOrEmpty(filePath))
+                {
+                    assemblyPath = "";
+
+                    return false;
+                }
+
+                assemblyPath = filePath;
+
+                return true;
+            }
+
+            assemblyPath = Directory.GetFiles(Path.Combine(basePath, frameworks.Max()), "*.dll", SearchOption.TopDirectoryOnly).FirstOrDefault();
+
+            return !string.IsNullOrEmpty(assemblyPath);
+        }
+
+        private string GetAttributeValue(string line, string attribute)
+        {
+            int startIndex = line.IndexOf($"{attribute}=\"", StringComparison.OrdinalIgnoreCase) + 1;
+            int length = line.Substring(startIndex).IndexOf("\"", StringComparison.OrdinalIgnoreCase);
+
+            return line.Substring(startIndex, length);
+        }
+
+        private string GetCentralPackageVersion(string packageName)
+        {
+            string packagePropsPath = Path.Combine(SolutionDir, "Directory.Packages.props");
+
+            if (!File.Exists(packagePropsPath))
+            {
+                return "";
+            }
+
+            foreach (var line in File.ReadLines(packagePropsPath))
+            {
+                string trimmedLine = line.Trim();
+
+                if (trimmedLine.StartsWith("<PackageVersion") && trimmedLine.Contains(packageName))
+                {
+                    return GetAttributeValue(trimmedLine, "Version");
+                }
+            }
+
+            return "";
+        }
+
+        private HashSet<string> GetReferences(string projectPath)
+        {
+            bool isItemGroup = false;
+            HashSet<string> references = new HashSet<string>();
+
+            // Filter for PackageReference and ProjectReference
+            foreach (string line in File.ReadLines(projectPath))
+            {
+                string trimmedLine = line.Trim();
+
+                if (!isItemGroup && trimmedLine.Contains("<ItemGroup>"))
+                {
+                    isItemGroup = true;
+                }
+
+                switch (isItemGroup)
+                {
+                    case true when trimmedLine.Contains("<PackageReference"):
+                        string package = GetAttributeValue(trimmedLine, "Include");
+                        string version = !trimmedLine.Contains("Version")
+                            ? GetCentralPackageVersion(package)
+                            : GetAttributeValue(trimmedLine, "Version");
+
+                        if (TryGetNugetAssemblyPath(package, version, out string filePath))
+                        {
+                            references.Add(filePath);
+                        }
+                        else
+                        {
+                            throw new DllNotFoundException($"Couldn't find dll for '{package}' with version {version}");
+                        }
+                        break;
+                    case true when trimmedLine.StartsWith("<ProjectReference", StringComparison.OrdinalIgnoreCase):
+                        references.Add(GetAttributeValue(trimmedLine, "Include"));
+                        break;
+                    case true when trimmedLine.StartsWith("</ItemGroup>", StringComparison.OrdinalIgnoreCase):
+                        isItemGroup = false;
+                        break;
+                }
+            }
+
+            return references;
         }
 
         private void AddGeneratedSource(string filePath, string content)
