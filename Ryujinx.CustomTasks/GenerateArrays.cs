@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.IO;
 using Ryujinx.CustomTasks.SyntaxWalker;
 using Ryujinx.CustomTasks.Helper;
+using System;
+using System.Linq;
 using Task = Microsoft.Build.Utilities.Task;
 
 namespace Ryujinx.CustomTasks
@@ -15,7 +17,7 @@ namespace Ryujinx.CustomTasks
         private const string InterfaceFileName = "IArray.g.cs";
         private const string ArraysFileName = "Arrays.g.cs";
 
-        private readonly List<string> _outputFiles = new List<string>();
+        private readonly HashSet<string> _outputFiles = new HashSet<string>();
 
         [Required]
         public string ArrayNamespace { get; set; }
@@ -24,7 +26,19 @@ namespace Ryujinx.CustomTasks
         public string OutputPath { get; set; }
 
         [Required]
-        public ITaskItem[] InputFiles { get; set; }
+        public bool ScanSolution { get; set; }
+
+        [Required]
+        public string SolutionDir { get; set; }
+
+        [Required]
+        public string ProjectDir { get; set; }
+
+        [Required]
+        public string NugetPackagePath { get; set; }
+
+        [Required]
+        public string TargetFramework { get; set; }
 
         [Output]
         public string[] OutputFiles { get; set; }
@@ -52,13 +66,164 @@ namespace Ryujinx.CustomTasks
             return size;
         }
 
-        private void AddGeneratedSource(string filePath, string content)
+        private string[] GetProjectFiles()
         {
-            File.WriteAllText(filePath, content);
-            _outputFiles.Add(filePath);
+            if (ScanSolution)
+            {
+                return Directory.GetFiles(SolutionDir, "*.csproj", SearchOption.AllDirectories);
+            }
+            else
+            {
+                return Directory.GetFiles(ProjectDir, "*.csproj", SearchOption.TopDirectoryOnly);
+            }
         }
 
-        private ICollection<int> GetArraySizes(string itemPath)
+        private bool TryGetNugetAssemblyPath(string package, string version, out string assemblyPath)
+        {
+            if (string.IsNullOrEmpty(version))
+            {
+                assemblyPath = "";
+
+                return false;
+            }
+
+            string basePath = Path.Combine(NugetPackagePath, package.ToLower(), version, "lib");
+            string filePath;
+
+            if (Directory.Exists(Path.Combine(basePath, TargetFramework)))
+            {
+                filePath = Directory.GetFiles(Path.Combine(basePath, TargetFramework), "*.dll", SearchOption.TopDirectoryOnly).FirstOrDefault();
+
+                if (string.IsNullOrEmpty(filePath))
+                {
+                    assemblyPath = "";
+
+                    return false;
+                }
+
+                assemblyPath = filePath;
+
+                return true;
+            }
+
+            string[] frameworks = Directory.GetDirectories(basePath);
+
+            List<string> standardList = frameworks.Where(framework => framework.Contains("netstandard")).ToList();
+
+            if (standardList.Count > 0)
+            {
+                filePath = Directory.GetFiles(Path.Combine(basePath, standardList.Max()), "*.dll", SearchOption.TopDirectoryOnly).FirstOrDefault();
+
+                if (string.IsNullOrEmpty(filePath))
+                {
+                    assemblyPath = "";
+
+                    return false;
+                }
+
+                assemblyPath = filePath;
+
+                return true;
+            }
+
+            assemblyPath = Directory.GetFiles(Path.Combine(basePath, frameworks.Max()), "*.dll", SearchOption.TopDirectoryOnly).FirstOrDefault();
+
+            return !string.IsNullOrEmpty(assemblyPath);
+        }
+
+        private string GetAttributeValue(string line, string attribute)
+        {
+            int startIndex = line.IndexOf($"{attribute}=\"", StringComparison.OrdinalIgnoreCase) + 1;
+            int length = line.Substring(startIndex).IndexOf("\"", StringComparison.OrdinalIgnoreCase);
+
+            return line.Substring(startIndex, length);
+        }
+
+        private string GetCentralPackageVersion(string packageName)
+        {
+            string packagePropsPath = Path.Combine(SolutionDir, "Directory.Packages.props");
+
+            if (!File.Exists(packagePropsPath))
+            {
+                return "";
+            }
+
+            foreach (var line in File.ReadLines(packagePropsPath))
+            {
+                string trimmedLine = line.Trim();
+
+                if (trimmedLine.StartsWith("<PackageVersion") && trimmedLine.Contains(packageName))
+                {
+                    return GetAttributeValue(trimmedLine, "Version");
+                }
+            }
+
+            return "";
+        }
+
+        private HashSet<string> GetReferences(string projectPath)
+        {
+            bool isItemGroup = false;
+            HashSet<string> references = new HashSet<string>();
+
+            // Filter for PackageReference and ProjectReference
+            foreach (string line in File.ReadLines(projectPath))
+            {
+                string trimmedLine = line.Trim();
+
+                if (!isItemGroup && trimmedLine.Contains("<ItemGroup>"))
+                {
+                    isItemGroup = true;
+                }
+
+                switch (isItemGroup)
+                {
+                    case true when trimmedLine.Contains("<PackageReference"):
+                        string package = GetAttributeValue(trimmedLine, "Include");
+                        string version = !trimmedLine.Contains("Version")
+                            ? GetCentralPackageVersion(package)
+                            : GetAttributeValue(trimmedLine, "Version");
+
+                        if (TryGetNugetAssemblyPath(package, version, out string filePath))
+                        {
+                            references.Add(filePath);
+                        }
+                        else
+                        {
+                            throw new DllNotFoundException($"Couldn't find dll for '{package}' with version {version}");
+                        }
+                        break;
+                    case true when trimmedLine.StartsWith("<ProjectReference", StringComparison.OrdinalIgnoreCase):
+                        references.Add(GetAttributeValue(trimmedLine, "Include"));
+                        break;
+                    case true when trimmedLine.StartsWith("</ItemGroup>", StringComparison.OrdinalIgnoreCase):
+                        isItemGroup = false;
+                        break;
+                }
+            }
+
+            return references;
+        }
+
+        private void AddGeneratedSource(string filePath, string content)
+        {
+            bool addToOutputFiles = true;
+
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+                addToOutputFiles = false;
+            }
+
+            File.WriteAllText(filePath, content);
+
+            if (addToOutputFiles)
+            {
+                _outputFiles.Add(filePath);
+            }
+        }
+
+        private HashSet<int> GetArraySizes(string itemPath)
         {
             Log.LogMessage(MessageImportance.Low, $"Searching for StructArray types in: {itemPath}");
 
@@ -173,19 +338,14 @@ namespace Ryujinx.CustomTasks
             string arraysFilePath = Path.Combine(OutputPath, ArraysFileName);
             List<int> arraySizes = new List<int>();
 
-            File.Delete(interfaceFilePath);
-            File.Delete(arraysFilePath);
-
-            foreach (var item in InputFiles)
+            foreach (var item in Directory.EnumerateFiles(ScanSolution ? SolutionDir: ProjectDir, "*.cs", SearchOption.AllDirectories))
             {
-                string fullPath = item.GetMetadata("FullPath");
-
-                if (fullPath.EndsWith(".g.cs") || fullPath.Contains(Path.Combine("obj","Debug")) || fullPath.Contains(Path.Combine("obj", "Release")))
+                if (item.EndsWith(".g.cs") || item.Contains(Path.Combine("obj","Debug")) || item.Contains(Path.Combine("obj", "Release")))
                 {
                     continue;
                 }
 
-                foreach (int size in GetArraySizes(fullPath))
+                foreach (int size in GetArraySizes(item))
                 {
                     if (!arraySizes.Contains(size))
                     {
