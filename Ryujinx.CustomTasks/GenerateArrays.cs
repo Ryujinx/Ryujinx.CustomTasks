@@ -55,8 +55,20 @@ namespace Ryujinx.CustomTasks
 
         private void AddGeneratedSource(string filePath, string content)
         {
+            bool addToOutputFiles = true;
+
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+                addToOutputFiles = false;
+            }
+
             File.WriteAllText(filePath, content);
-            _outputFiles.Add(filePath);
+
+            if (addToOutputFiles)
+            {
+                _outputFiles.Add(filePath);
+            }
         }
 
         private HashSet<int> GetArraySizes(string itemPath)
@@ -173,9 +185,6 @@ namespace Ryujinx.CustomTasks
             string interfaceFilePath = Path.Combine(OutputPath, InterfaceFileName);
             string arraysFilePath = Path.Combine(OutputPath, ArraysFileName);
             List<int> arraySizes = new List<int>();
-
-            File.Delete(interfaceFilePath);
-            File.Delete(arraysFilePath);
 
             foreach (var item in InputFiles)
             {
