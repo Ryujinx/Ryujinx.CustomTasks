@@ -3,16 +3,23 @@
 
     <!-- Task: GenerateArrays -->
 
-    <!-- Defining all sources files of the current project for the input parameter -->
+    <!-- Assign default values -->
+    <PropertyGroup>
+        <ArrayScanSolution Condition="'$(ArrayScanSolution)' == ''">false</ArrayScanSolution>
+    </PropertyGroup>
+
     <ItemGroup>
-        <ArrayInputFiles Condition="'$(ArrayInputFiles)' == ''" Include="$(MSBuildProjectDirectory)\**\*.cs" />
+        <ArrayInputFiles Condition="'$(ArrayScanSolution)' == 'false'" Include="$(MSBuildProjectDirectory)\**\*.cs" />
+        <ArrayInputFiles Condition="'$(ArrayScanSolution)' == 'true'" Include="$(SolutionDir)\**\*.cs" />
     </ItemGroup>
 
     <!--A target that generates code, which is executed before the compilation-->
     <!-- TODO: Make "Outputs" more generic -->
     <Target Name="BeforeCompile" Inputs="@(ArrayInputFiles)" Outputs="$(ArrayOutputPath)\Arrays.g.cs;$(ArrayOutputPath)\IArray.g.cs">
         <!--Calling our custom task -->
-        <GenerateArrays ArrayNamespace="$(ArrayNamespace)" InputFiles="@(ArrayInputFiles)" OutputPath="$(ArrayOutputPath)">
+        <GenerateArrays ArrayNamespace="$(ArrayNamespace)" ScanSolution="$(ArrayScanSolution)" OutputPath="$(ArrayOutputPath)"
+                        SolutionDir="$(SolutionDir)" ProjectDir="$(MSBuildProjectDirectory)" NugetPackagePath="$(NuGetPackageRoot)"
+                        TargetFramework="$(TargetFramework)">
             <!--Our generated files are included to be compiled-->
             <Output TaskParameter="OutputFiles" ItemName="Compile" />
         </GenerateArrays>

@@ -25,7 +25,19 @@ namespace Ryujinx.CustomTasks
         public string OutputPath { get; set; }
 
         [Required]
-        public ITaskItem[] InputFiles { get; set; }
+        public bool ScanSolution { get; set; }
+
+        [Required]
+        public string SolutionDir { get; set; }
+
+        [Required]
+        public string ProjectDir { get; set; }
+
+        [Required]
+        public string NugetPackagePath { get; set; }
+
+        [Required]
+        public string TargetFramework { get; set; }
 
         [Output]
         public string[] OutputFiles { get; set; }
@@ -186,16 +198,14 @@ namespace Ryujinx.CustomTasks
             string arraysFilePath = Path.Combine(OutputPath, ArraysFileName);
             List<int> arraySizes = new List<int>();
 
-            foreach (var item in InputFiles)
+            foreach (var item in Directory.EnumerateFiles(ScanSolution ? SolutionDir: ProjectDir, "*.cs", SearchOption.AllDirectories))
             {
-                string fullPath = item.GetMetadata("FullPath");
-
-                if (fullPath.EndsWith(".g.cs") || fullPath.Contains(Path.Combine("obj","Debug")) || fullPath.Contains(Path.Combine("obj", "Release")))
+                if (item.EndsWith(".g.cs") || item.Contains(Path.Combine("obj","Debug")) || item.Contains(Path.Combine("obj", "Release")))
                 {
                     continue;
                 }
 
-                foreach (int size in GetArraySizes(fullPath))
+                foreach (int size in GetArraySizes(item))
                 {
                     if (!arraySizes.Contains(size))
                     {
