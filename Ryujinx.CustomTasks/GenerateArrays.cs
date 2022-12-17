@@ -1,12 +1,13 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using Microsoft.Build.Framework;
+using Microsoft.Build.Utilities;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.Build.Framework;
+using Ryujinx.CustomTasks.Helper;
+using Ryujinx.CustomTasks.SyntaxWalker;
 using System.Collections.Generic;
 using System.IO;
-using Ryujinx.CustomTasks.SyntaxWalker;
-using Ryujinx.CustomTasks.Helper;
-using Task = Microsoft.Build.Utilities.Task;
+using System.Linq;
 
 namespace Ryujinx.CustomTasks
 {
@@ -54,8 +55,16 @@ namespace Ryujinx.CustomTasks
 
         private void AddGeneratedSource(string filePath, string content)
         {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+            else
+            {
+                _outputFiles.Add(filePath);
+            }
+
             File.WriteAllText(filePath, content);
-            _outputFiles.Add(filePath);
         }
 
         private ICollection<int> GetArraySizes(string itemPath)
@@ -172,9 +181,6 @@ namespace Ryujinx.CustomTasks
             string interfaceFilePath = Path.Combine(OutputPath, InterfaceFileName);
             string arraysFilePath = Path.Combine(OutputPath, ArraysFileName);
             List<int> arraySizes = new List<int>();
-
-            File.Delete(interfaceFilePath);
-            File.Delete(arraysFilePath);
 
             foreach (var item in InputFiles)
             {
