@@ -182,6 +182,11 @@ namespace Ryujinx.CustomTasks
             string arraysFilePath = Path.Combine(OutputPath, ArraysFileName);
             List<int> arraySizes = new List<int>();
 
+            if (!Directory.Exists(OutputPath))
+            {
+                Directory.CreateDirectory(OutputPath);
+            }
+
             foreach (var item in InputFiles)
             {
                 string fullPath = item.GetMetadata("FullPath");
